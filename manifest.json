@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "QA Ninja: Your Silent QA Architect",
+  "description": "Find, test, and explore XPath free for 50 inspections a day. Paid plans add unlimited inspections and workflow recording.",
+  "version": "2.0.0",
+  "icons": {
+    "16": "icons/icon16-light.png",
+    "48": "icons/icon48-light.png",
+    "128": "icons/icon128-light.png"
+  },
+  "action": {
+    "default_title": "Open QA Ninja Panel",
+    "default_icon": {
+      "16": "icons/icon16-light.png",
+      "48": "icons/icon48-light.png",
+      "128": "icons/icon128-light.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "scripting",
+    "sidePanel",
+    "webNavigation",
+    "unlimitedStorage",
+    "clipboardWrite",
+    "cookies"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "xpath.js",
+        "inspector.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "minimum_chrome_version": "122",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3zFI09YjSTGiiTQ13aInpv2f2p4hH0iW2BbknlL+bzPjyVvUo8BdaCpJKdbsqwfzhvm/vSjqtEUENVm49PyRTvA+5UfOvkc8GsNwg+u9N0tC5JByh4BXvo14WxQT1Uk+k7gkPB9sxiGcLPSoaFIirMrxH0bYJEI9jPKbUZoouRyq6yuiiZBYRlKf+AkZOUuJcM8G6FZ+7g9buH+sfqMZJtd77L4Wm2OqYVJNJlL1LX/ncRhAic8DF8h/JgqtmvMGF2rds18cwmLGYqzTfs2tqNuSiOeGgCvkXuxL0wlgtOz+k4nnHW4m8da6djyHk62QwmXhhtEiyrSmIUf31SMmNQIDAQAB"
+}

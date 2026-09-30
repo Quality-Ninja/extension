@@ -1,0 +1,19 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+
+# Environment files: only the example is tracked.
+.env
+.env.*
+!.env.example
+
+# Signing keys and packed builds stay local.
+*.pem
+*.crx
+
+# Markdown stays local.
+*.md
+
+.DS_Store

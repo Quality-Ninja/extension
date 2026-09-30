@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QA Ninja</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="brand"><img src="icons/icon48-dark.png" alt="" width="28" height="28"><img class="brand-wordmark" src="icons/wordmark.svg" alt="QA Ninja" width="84" height="20"></h1>
+    <details id="menu" class="menu">
+      <summary aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+      </summary>
+      <div class="menu-panel">
+        <a id="menu-signin" href="login.html?mode=login&amp;open=1">Log in</a>
+        <button id="dashboard" type="button" hidden>Open dashboard</button>
+        <button id="menu-plans" type="button">View plans</button>
+        <button id="auth-refresh" type="button">Refresh sign-in</button>
+        <button id="logout" type="button" hidden>Sign out</button>
+        <p id="version" class="meta menu-version"></p>
+      </div>
+    </details>
+  </header>
+
+  <div class="tabs mode-tabs" role="tablist" aria-label="Tool">
+    <button id="mode-xpath" type="button" role="tab" aria-selected="true" aria-controls="finder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5"/></svg>
+      XPath
+    </button>
+    <button id="mode-record" type="button" role="tab" aria-selected="false" aria-controls="recorder" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
+      Record
+    </button>
+    <button id="mode-generate" type="button" role="tab" aria-selected="false" aria-controls="generator" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>
+      Generate
+    </button>
+  </div>
+
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+
+  <main>
+    <section id="finder" class="tool" role="tabpanel" aria-labelledby="mode-xpath">
+      <div class="finder-tool">
+        <button id="pick" type="button" class="primary wide pick">
+          <svg class="ants" aria-hidden="true" focusable="false"><rect/></svg>
+          <svg class="crosshair" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+          <span id="pick-label">Select element</span>
+        </button>
+        <p id="pick-hint" class="hint pick-hint">Pick an element, explore its hierarchy, and copy its XPath.</p>
+        <div id="quota" class="quota" hidden>
+          <div id="quota-rail" class="quota-rail" aria-hidden="true"></div>
+          <p id="quota-text" class="meta quota-text"></p>
+        </div>
+        <div id="quota-gate" class="gate quota-gate" role="status" hidden>
+          <h2>You've used today's 50 inspections</h2>
+          <p id="quota-reset"></p>
+          <div class="row">
+            <button id="quota-plans" type="button" class="primary">View plans</button>
+          </div>
+        </div>
+        <div class="xpath-pane">
+          <button id="frame-context" type="button" class="pane-tab" hidden>
+            <span id="frame-kind" class="pane-kind"></span>
+            <span class="url"><span class="url-head"><span id="url-host" class="url-host"></span><span id="url-middle"></span></span><span id="url-tail" class="url-tail"></span></span>
+            <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+            <svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <label class="sr-only" for="expression">XPath expression</label>
+          <textarea id="expression" rows="2" spellcheck="false" autocomplete="off" placeholder="Select an element or paste an XPath…"></textarea>
+          <div class="pane-status">
+            <span id="match-count" class="match-count" aria-live="polite"></span>
+            <button id="test" type="button" class="compact">
+              <svg class="icon-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 4.5v15L19 12 7 4.5Z"/></svg>
+              Test
+            </button>
+            <button id="copy" type="button" class="compact">
+              <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+              <svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
+              Copy
+            </button>
+          </div>
+        </div>
+        <div class="pane-extra">
+          <button id="full-path" type="button" class="quiet compact" hidden>Use full XPath</button>
+          <div id="match-nav" class="match-nav" hidden>
+            <button id="previous-match" type="button" class="icon-button" aria-label="Previous match">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span id="match-position" class="match-position"></span>
+            <button id="next-match" type="button" class="icon-button" aria-label="Next match">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+        <details id="match-details" class="matches" hidden>
+          <summary>Matching elements</summary>
+          <ul id="match-list" class="node-list"></ul>
+          <div id="match-pages" class="row" hidden>
+            <button id="previous-matches" type="button">Previous 50</button>
+            <button id="next-matches" type="button">Next 50</button>
+          </div>
+        </details>
+        <section id="hierarchy" aria-labelledby="path-title" hidden>
+          <div class="section-label path-head">
+            <h2 id="path-title">Element path</h2>
+            <div class="path-actions">
+              <button id="back" type="button" class="quiet compact">
+                <svg class="icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+                Back
+              </button>
+              <button id="original" type="button" class="quiet compact">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                Original element
+              </button>
+            </div>
+          </div>
+          <ol id="breadcrumbs" class="path" aria-label="Ancestors and selected element"></ol>
+          <div class="children">
+            <div class="section-label"><h3 id="children-title">Children</h3><span id="child-count" class="meta"></span></div>
+            <ul id="children" class="node-list" aria-labelledby="children-title"></ul>
+            <div id="child-pages" class="row" hidden>
+              <button id="previous-children" type="button">Previous 50</button>
+              <button id="next-children" type="button">Next 50</button>
+            </div>
+          </div>
+        </section>
+      </div>
+      <!-- Before a pick, a ghost trail shows where the element's path will appear. -->
+      <div id="trail-empty" class="trail-empty">
+        <svg class="trail-art" viewBox="0 0 220 96" aria-hidden="true" focusable="false">
+          <path class="trail-line" d="M10 84c40 0 44-34 84-34s44-34 84-34h22"/>
+          <circle class="trail-node" cx="10" cy="84" r="4.5"/>
+          <circle class="trail-node" cx="94" cy="50" r="4.5"/>
+          <rect class="trail-waypoint" x="202" y="9" width="10" height="10" rx="1" transform="rotate(45 207 14)"/>
+        </svg>
+        <p class="hint">Its path appears here: ancestors, the element, and its children.</p>
+      </div>
+    </section>
+
+    <section id="recorder" class="tool" role="tabpanel" aria-labelledby="mode-record" hidden>
+      <!-- Without a paid plan, Record opens on its cover: the tool greyed out beneath, the offer on a sheet above. -->
+      <section id="record-cover" class="cover" aria-labelledby="record-cover-title" hidden>
+        <div class="cover-preview" aria-hidden="true" inert>
+          <div class="field"><label>Save to</label><select><option>Dashboard</option></select></div>
+          <p class="status" data-state="recording">Recording this tab</p>
+          <div class="row"><button type="button">Pause</button><button type="button" class="primary">Finish</button></div>
+          <div class="section-label"><h2>Checkout</h2><span class="meta">8 steps</span></div>
+          <ol class="steps">
+            <li>Add to cart<small>//*[@id='add-to-cart']</small></li>
+            <li>Cart<small>//a[@href='/cart']</small></li>
+            <li>Checkout<small>//button[text()='Checkout']</small></li>
+            <li>Standard shipping<small>//label[@for='ship-standard']</small></li>
+            <li>Continue to payment<small>//*[@id='continue']</small></li>
+            <li>Visa ending 4242<small>//*[@data-card='visa-4242']</small></li>
+            <li>Place order<small>//*[@id='place-order']</small></li>
+            <li>View order<small>//a[contains(@href,'/orders/')]</small></li>
+          </ol>
+        </div>
+        <div class="cover-sheet">
+          <h2 id="record-cover-title">Record a workflow</h2>
+          <p>Click through a flow on this tab. Each click becomes a step with its XPath and a screenshot, saved as Playwright, Selenium, Cypress, and Robot Framework scripts with a PDF report.</p>
+          <div class="cover-actions">
+            <a id="record-signin" class="button primary" href="login.html?mode=login&amp;return=record&amp;open=1">Log in</a>
+            <button id="record-plans" type="button">View plans</button>
+          </div>
+          <p class="meta">Recording is part of the Basic and Supercharged plans.</p>
+        </div>
+      </section>
+      <div class="record-body">
+        <div id="record-tools" hidden>
+          <div class="field">
+            <label for="destination">Save to</label>
+            <select id="destination">
+              <option value="local">Local folder</option>
+              <option value="dashboard">Dashboard</option>
+            </select>
+          </div>
+          <div id="folder-row" class="row folder-row">
+            <span id="folder-name" class="meta">No folder chosen</span>
+            <button id="choose-folder" type="button" class="quiet">Choose folder</button>
+          </div>
+          <p id="record-status" class="status" role="status" data-state="idle">Ready to record</p>
+          <p id="record-lapsed" class="meta" hidden>Recording needs an active plan. You can still save or discard this draft.</p>
+          <div class="row">
+            <button id="record" type="button" class="primary">Start recording</button>
+            <button id="pause" type="button" hidden>Pause</button>
+            <button id="finish" type="button" class="primary" hidden>Finish</button>
+          </div>
+        </div>
+        <div id="draft-view" hidden>
+          <div class="section-label"><h2 id="draft-title">Current recording</h2><span id="step-count" class="meta"></span></div>
+          <ol id="steps" class="steps"></ol>
+          <p id="steps-note" class="meta" hidden></p>
+          <div id="save-actions" class="row" hidden>
+            <button id="save-files" type="button" class="primary">Save</button>
+            <button id="zip" type="button">Download ZIP</button>
+            <button id="open-generate" type="button" class="quiet" hidden>Open in Generate</button>
+          </div>
+          <button id="discard" type="button" class="quiet danger discard">Discard draft</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="generator" class="tool" role="tabpanel" aria-labelledby="mode-generate" hidden>
+      <section id="generate-cover" class="cover" aria-labelledby="generate-cover-title" hidden>
+        <div class="cover-preview" aria-hidden="true" inert>
+          <div class="script-pane">
+            <div class="tabs pane-tabs"><button type="button" role="tab" aria-selected="true">Playwright</button><button type="button" role="tab">Selenium</button><button type="button" role="tab">Cypress</button><button type="button" role="tab">Robot</button></div>
+            <pre class="script-code"><code>from playwright.sync_api import sync_playwright
+
+def test_recording():
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto("https://shop.example.com/")
+        page.locator("xpath=//*[@id='add-to-cart']").click()
+        page.locator("xpath=//a[@href='/cart']").click()
+        page.locator("xpath=//button[text()='Checkout']").click()
+        page.locator("xpath=//label[@for='ship-standard']").click()
+        page.locator("xpath=//*[@id='continue']").click()
+        page.locator("xpath=//*[@data-card='visa-4242']").click()
+        page.locator("xpath=//*[@id='place-order']").click()
+        page.locator("xpath=//a[contains(@href,'/orders/')]").click()
+        browser.close()</code></pre>
+            <div class="pane-status"><span class="script-file">test_checkout_playwright.py</span><span class="pane-actions"><button type="button" class="compact">Copy</button><button type="button" class="compact">Download</button></span></div>
+          </div>
+          <div class="section-label"><h2>Test plans</h2><span class="meta">6 plans</span></div>
+          <ul class="plan-list">
+            <li><button type="button" class="plan target"><span class="plan-name">Checkout</span><span class="plan-steps">8 steps</span><small>Saved Sep 28</small></button></li>
+            <li><button type="button" class="plan"><span class="plan-name">Sign in with SSO</span><span class="plan-steps">6 steps</span><small>Saved Sep 24</small></button></li>
+            <li><button type="button" class="plan"><span class="plan-name">Refund an order</span><span class="plan-steps">9 steps</span><small>Saved Sep 19</small></button></li>
+            <li><button type="button" class="plan"><span class="plan-name">Update billing address</span><span class="plan-steps">5 steps</span><small>Saved Sep 16</small></button></li>
+            <li><button type="button" class="plan"><span class="plan-name">Invite a teammate</span><span class="plan-steps">4 steps</span><small>Saved Sep 11</small></button></li>
+            <li><button type="button" class="plan"><span class="plan-name">Cancel a subscription</span><span class="plan-steps">7 steps</span><small>Saved Sep 3</small></button></li>
+          </ul>
+        </div>
+        <div class="cover-sheet">
+          <h2 id="generate-cover-title">Generate test suites</h2>
+          <p id="generate-cover-text">Recordings you save to your dashboard become test plans. Pick one to get its tests for Playwright, Selenium, Cypress, or Robot Framework, then copy or download them.</p>
+          <div class="cover-actions">
+            <a id="generate-signin" class="button primary" href="login.html?mode=login&amp;return=generate&amp;open=1">Log in</a>
+            <button id="generate-plans" type="button">View plans</button>
+            <button id="generate-dashboard" type="button" hidden>Open dashboard</button>
+          </div>
+          <p class="meta">Basic saves up to 25 test plans. Supercharged has no limit.</p>
+        </div>
+      </section>
+      <div id="generate-tools" hidden>
+        <div id="script-view" hidden>
+          <div class="script-pane">
+            <div id="frameworks" class="tabs pane-tabs" role="tablist" aria-label="Framework">
+              <button id="fw-playwright" type="button" role="tab" aria-selected="true" aria-controls="script-code" data-framework="playwright">Playwright</button>
+              <button id="fw-selenium" type="button" role="tab" aria-selected="false" aria-controls="script-code" data-framework="selenium" tabindex="-1">Selenium</button>
+              <button id="fw-cypress" type="button" role="tab" aria-selected="false" aria-controls="script-code" data-framework="cypress" tabindex="-1">Cypress</button>
+              <button id="fw-robot" type="button" role="tab" aria-selected="false" aria-controls="script-code" data-framework="robot" tabindex="-1" title="Robot Framework">Robot</button>
+            </div>
+            <pre id="script-code" class="script-code" role="tabpanel" tabindex="0" aria-labelledby="fw-playwright"><code id="script-text"></code></pre>
+            <div class="pane-status">
+              <span id="script-file" class="script-file"></span>
+              <span class="pane-actions">
+              <button id="copy-script" type="button" class="compact">
+                <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+                <svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
+                Copy
+              </button>
+              <button id="download-script" type="button" class="compact">
+                <svg class="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>
+                Download
+              </button>
+              </span>
+            </div>
+          </div>
+          <div class="pane-extra">
+            <span id="plan-meta" class="meta"></span>
+            <button id="open-plan" type="button" class="quiet compact">Open in dashboard</button>
+          </div>
+        </div>
+        <p id="plans-state" class="meta" role="status"></p>
+        <div id="plans-view" hidden>
+          <div class="section-label"><h2 id="plans-title">Test plans</h2><span id="plan-count" class="meta"></span></div>
+          <ul id="plans" class="plan-list" aria-labelledby="plans-title"></ul>
+        </div>
+        <div id="plans-empty" class="empty" hidden>
+          <h2>No test plans yet</h2>
+          <p>Record a workflow and save it to your dashboard. It shows up here as a test plan.</p>
+          <button id="plans-record" type="button" class="primary">Record a workflow</button>
+        </div>
+        <button id="plans-retry" type="button" hidden>Try again</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p id="account-status"></p>
+    <div id="account-actions" class="account-actions" hidden>
+      <a id="footer-login" class="button compact quiet" href="login.html?mode=login&amp;open=1">Log in</a>
+      <a id="footer-signup" class="button compact ghost" href="login.html?mode=signup&amp;open=1">Sign up</a>
+    </div>
+    <p class="tagline">{Blaze/Your*Own_Path!}</p>
+  </footer>
+
+  <div id="toast" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+  <template id="toast-template">
+    <div class="toast">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>
+      <div class="toast-body"><strong class="toast-title"></strong><code class="toast-detail" aria-hidden="true"></code></div>
+    </div>
+  </template>
+  <script src="config.js"></script>
+  <script src="store.js"></script>
+  <script src="sidebar.js"></script>
+</body>
+</html>

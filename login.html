@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · QA Ninja</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body class="auth-page">
+  <!-- The legacy sign-in look, scaled for the panel. Logging in happens on the website (Clerk); this page opens it and waits. -->
+  <main class="auth-card">
+    <a id="back-link" class="back-link" href="sidebar.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+      <span id="back-label">Back to XPath Finder</span>
+    </a>
+    <img class="auth-hero" src="icons/qaninja.drkPrimary%20icon%20wwhitename.goldtagline.svg" alt="QA Ninja" width="180" height="180">
+    <p class="auth-subtitle">Sign in to capture, compose, and automate at the speed of your next click.</p>
+    <section class="auth-panel" aria-labelledby="form-title">
+      <h1 id="form-title">Log in</h1>
+      <p id="auth-intro" class="hint">Log in on the QA Ninja website with an email code or Google. This panel updates when you finish.</p>
+      <p id="error-msg" class="notice error" role="alert"></p>
+      <button id="auth-btn" type="button" class="primary wide auth-submit">Continue on website</button>
+      <button id="auth-check" type="button" class="quiet wide" hidden>I've finished on the website</button>
+      <button id="auth-toggle" type="button" class="link-button auth-toggle">Need an account? Sign up</button>
+    </section>
+  </main>
+  <script src="browser-polyfill.min.js"></script>
+  <script src="config.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>
