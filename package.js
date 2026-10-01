@@ -1,5 +1,5 @@
 // Packages the extension for the Chrome Web Store: only the files it runs, with production settings.
-// The store sees nothing but this zip. Settings come from the environment:
+// The store sees nothing but this zip. Settings come from the environment or .env.local (see .env.example):
 //   API_BASE_URL, APP_BASE_URL, CLERK_SYNC_HOST  HTTPS origins (API, web app, Clerk Frontend API)
 //   CLERK_PUBLISHABLE_KEY                        the live publishable key (pk_live_…)
 //   CHROME_WEB_STORE_PUBLIC_KEY                  the store item's public key (Developer Dashboard > Package)
@@ -7,6 +7,10 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { zipSync } = require('fflate');
+
+// Variables already in the environment win over .env.local.
+const envFile = path.join(__dirname, '.env.local');
+if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
 // The files the extension loads at run time; tests/extension.spec.cjs installs the same set.
 const RUNTIME = ['manifest.json', 'background.js', 'session.js', 'store.js', 'xpath.js', 'inspector.js', 'content.js',
