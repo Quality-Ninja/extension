@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 // A cover's Log in link names its tab (?return=record), so logging in, or going back, lands there again.
-const TABS = { record: 'Record', generate: 'Generate' };
+const TABS = { record: 'Record', generate: 'Generate', execute: 'Execute' };
 const returnTo = TABS[params.get('return')] ? params.get('return') : null;
 const home = returnTo ? `sidebar.html?mode=${returnTo}` : 'sidebar.html';
 $('back-link').href = home;

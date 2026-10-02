@@ -24,6 +24,11 @@ async function applyAuth(session) {
     if ((session?.subject || null) === authState.subject && (session?.sessionId || null) === authState.sessionId) return;
     try { await pause(); } catch (error) { emit({ event: 'error', message: error.message }); }
     if (generation !== authGeneration) return;
+    // A test run belongs to the account that started it, and saved run secrets to the account that saved them.
+    if ((session?.subject || null) !== authState.subject) {
+      NinjaExecutor.stop();
+      await NinjaExecutor.keepSecretsFor(session?.subject || null).catch(() => {});
+    }
     authState = { signedIn: !!session, subject: session?.subject || null, sessionId: session?.sessionId || null, epoch: crypto.randomUUID() };
     await chrome.storage.local.remove(['capabilities', 'finder_quota']);
     await chrome.storage.local.set({ auth_state: authState });
@@ -66,6 +71,22 @@ async function api(endpoint, method = 'GET', body, session) {
     if (response.status === 401) await applyAuth(null);
     throw Object.assign(new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${response.status}).`), { status: response.status });
   }
+  return data;
+}
+
+// Multipart uploads (run evidence) with the same account checks and one retry after a refreshed token.
+async function apiForm(endpoint, form, session) {
+  const initial = session || await refreshAuth();
+  if (!initial.token) throw Object.assign(new Error('Sign in to continue.'), { status: 401 });
+  const send = async current => {
+    if (!sameAuth(initial) || !sameAuth(current)) throw changedAccount();
+    return fetch(CONFIG.API_BASE_URL + endpoint, { method: 'POST', headers: { Authorization: `Bearer ${current.token}` }, body: form })
+      .catch(() => { throw Object.assign(new Error("Can't reach QA Ninja. Check your connection and try again."), { status: 503 }); });
+  };
+  let response = await send(initial);
+  if (response.status === 401) response = await send(await refreshAuth(true));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${response.status}).`), { status: response.status });
   return data;
 }
 

@@ -13,7 +13,7 @@ const envFile = path.join(__dirname, '.env.local');
 if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
 // The files the extension loads at run time; tests/extension.spec.cjs installs the same set.
-const RUNTIME = ['manifest.json', 'background.js', 'session.js', 'store.js', 'xpath.js', 'inspector.js', 'content.js',
+const RUNTIME = ['manifest.json', 'background.js', 'session.js', 'store.js', 'xpath.js', 'dom.js', 'inspector.js', 'snapshot.js', 'content.js',
   'sidebar.js', 'sidebar.css', 'sidebar.html', 'login.js', 'login.html', 'browser-polyfill.min.js', 'icons', 'fonts', 'dist'];
 
 const setting = name => (process.env[name] || '').trim().replace(/\/+$/, '');
@@ -49,6 +49,8 @@ function add(relative) {
 RUNTIME.forEach(add);
 const manifest = JSON.parse(Buffer.from(files['manifest.json']).toString('utf8'));
 manifest.key = storeKey;
+// Only the production web app may ask this extension to run a test.
+manifest.externally_connectable = { matches: [`${config.APP_BASE_URL}/*`] };
 files['manifest.json'] = new Uint8Array(Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
 files['config.js'] = new Uint8Array(Buffer.from(`const CONFIG = ${JSON.stringify(config, null, 4)};\n`));
 

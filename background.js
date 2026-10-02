@@ -1,4 +1,4 @@
-importScripts('config.js', 'store.js', 'dist/auth.js', 'session.js');
+importScripts('config.js', 'store.js', 'dist/auth.js', 'session.js', 'dist/executor.js');
 const panels = new Map();
 let operations = Promise.resolve();
 let stepWrites = Promise.resolve();
@@ -72,6 +72,7 @@ async function currentDraft() {
 // Worker restart never silently restarts page capture. IndexedDB keeps all accepted steps.
 const restored = (async () => {
   await chrome.storage.local.remove(['isRecording', 'session_id', 'recording_sequence']);
+  await NinjaExecutor.recoverAfterRestart().catch(() => {});
   const draft = await currentDraft();
   if (draft && ['recording', 'pausing', 'finishing'].includes(draft.status)) {
     draft.status = 'paused';
@@ -88,8 +89,11 @@ async function tabFor(port) {
   if (!safeTab(tab)) throw new Error('Open a regular web page to inspect elements. Browser settings and store pages cannot be inspected.');
   return tab;
 }
+// A test run owns its window: recording and picking stay out of it.
+const runTabError = () => Object.assign(new Error('That tab is running a test. Use another tab, or stop the run first.'), { status: 409 });
 async function inspect(port, msg) {
   const tab = await tabFor(port);
+  if (NinjaExecutor.isRunTab(tab.id)) throw runTabError();
   const context = inspectionFrames.get(tab.id) || { frameId: 0 };
   if (msg.action === 'pick') {
     await assertInspection();
@@ -141,16 +145,18 @@ async function record(action, caps) {
   let draft = await currentDraft();
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!safeTab(tab)) throw new Error('Open a web page before recording.');
+  if (NinjaExecutor.isRunTab(tab.id)) throw runTabError();
   if (action === 'start') {
     if (draft && draft.status !== 'saved') throw new Error('Save or discard the current draft before starting another recording.');
     draft = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), name: `Recording ${new Date().toLocaleString()}`,
-      status: 'recording', sequence: 0, tabId: tab.id, ownerId: caps.user_id, ownerSubject: caps.subject };
+      status: 'recording', sequence: 0, tabId: tab.id, ownerId: caps.user_id, ownerSubject: caps.subject,
+      captureTyping: (await chrome.storage.local.get('capture_typing')).capture_typing !== false };
     await chrome.storage.local.set({ activeDraft: draft.id });
   } else if (!draft || draft.status !== 'paused' || draft.ownerId !== caps.user_id || draft.ownerSubject !== caps.subject) throw new Error('No paused recording is available for this account.');
   draft.tabId = tab.id; draft.status = 'recording';
   await NinjaStore.put('drafts', draft);
   await broadcast({ type: 'INSPECT', action: 'clear' });
-  try { await chrome.tabs.sendMessage(tab.id, { type: 'RECORD_STATE', recordingId: draft.id }); }
+  try { await chrome.tabs.sendMessage(tab.id, { type: 'RECORD_STATE', recordingId: draft.id, captureTyping: draft.captureTyping !== false }); }
   catch { draft.status = 'paused'; await NinjaStore.put('drafts', draft); throw new Error('Reload this page before recording.'); }
   emit({ event: 'recording', draft });
   return draft;
@@ -177,6 +183,17 @@ async function handlePanel(port, msg) {
       return serialized(() => record(msg.action, caps));
     }
     case 'DRAFT': await restored; return { draft: await currentDraft() };
+    // Typed-text capture: remembered for new recordings, applied at once to the current one.
+    case 'RECORD_TYPING': return serialized(async () => {
+      await chrome.storage.local.set({ capture_typing: !!msg.on });
+      const draft = await currentDraft();
+      if (draft && !['ready', 'saved'].includes(draft.status)) {
+        draft.captureTyping = !!msg.on; await NinjaStore.put('drafts', draft);
+        if (draft.status === 'recording') await broadcast({ type: 'RECORD_STATE', recordingId: draft.id, captureTyping: draft.captureTyping }, draft.tabId);
+        emit({ event: 'recording', draft });
+      }
+      return { on: !!msg.on };
+    });
     case 'CAPABILITIES': return capabilities(true);
     case 'FINDER_QUOTA': return finderQuota(msg.refresh);
     // Generate's test plans are the account's saved recordings; a plan's recording holds the steps its scripts use.
@@ -198,9 +215,42 @@ async function handlePanel(port, msg) {
     });
     case 'WEBSITE': {
       const plan = msg.page === 'workflow' && Number.isSafeInteger(msg.id) && msg.id > 0;
-      const next = msg.page === 'account' ? '/account' : plan ? `/workflow/${msg.id}` : '/dashboard';
+      const run = msg.page === 'run' && /^run_[0-9a-f]{32}$/.test(msg.id || '');
+      const next = msg.page === 'account' ? '/account' : plan ? `/workflow/${msg.id}` : run ? `/execute/runs/${msg.id}`
+        : msg.page === 'execute' ? `/execute${msg.tab === 'agents' ? '?tab=agents' : ''}` : '/dashboard';
       return chrome.tabs.create({ url: CONFIG.APP_BASE_URL + next });
     }
+    // Execute: tests and agents come from the API; the run itself lives in NinjaExecutor.
+    case 'EXEC_TESTS': return api('/execute/tests');
+    case 'EXEC_CONNECTIONS': return api('/execute/connections');
+    case 'EXEC_RUNS': return api('/execute/runs?limit=5');
+    case 'EXEC_PENDING': return NinjaExecutor.pending();
+    case 'EXEC_STATE': return { run: NinjaExecutor.state(), prefs: await NinjaExecutor.prefs(), consentVersion: NinjaExecutor.CONSENT_VERSION };
+    case 'EXEC_START': {
+      if (!Number.isSafeInteger(msg.workflowId) || msg.workflowId < 1) throw new Error('Choose a test to run.');
+      return NinjaExecutor.start({ source: 'panel', workflowId: msg.workflowId, mode: msg.mode, brain: msg.brain, baseUrl: msg.baseUrl,
+        inputs: msg.inputs, secrets: msg.secrets, remember: !!msg.remember, consent: !!msg.consent });
+    }
+    case 'EXEC_APPROVE': return NinjaExecutor.start({ source: 'queued', runId: msg.runId, consent: !!msg.consent });
+    case 'EXEC_DISMISS': return NinjaExecutor.dismiss(msg.runId);
+    case 'EXEC_STOP': return NinjaExecutor.stop();
+    case 'EXEC_TAKEOVER': return NinjaExecutor.takeover();
+    case 'EXEC_RESUME': return NinjaExecutor.resume();
+    case 'EXEC_ANSWER': NinjaExecutor.answer(msg.id, typeof msg.value === 'string' ? msg.value.slice(0, 500) : null); return {};
+    case 'EXEC_PREFS': return msg.changes ? NinjaExecutor.setPrefs({
+      ...('autoRun' in msg.changes && { autoRun: !!msg.changes.autoRun }), ...('closeWindow' in msg.changes && { closeWindow: !!msg.changes.closeWindow }),
+      ...(msg.changes.consent && { consent: NinjaExecutor.CONSENT_VERSION }) }) : NinjaExecutor.prefs();
+    case 'EXEC_SECRETS': {
+      await authReady;
+      return { names: authState.subject ? await NinjaExecutor.rememberedSecrets(authState.subject, msg.testId) : [] };
+    }
+    case 'EXEC_FORGET': await authReady; if (authState.subject) await NinjaExecutor.forgetSecrets(authState.subject, msg.testId); return {};
+    // Coding agents through the local MCP bridge.
+    case 'BRIDGE_STATE': await NinjaExecutor.bridgeKeepTrying(); return NinjaExecutor.bridgeView();
+    case 'BRIDGE_PAIR': return NinjaExecutor.bridgePair(String(msg.code || ''));
+    case 'BRIDGE_CONNECT': return NinjaExecutor.bridgeConnect();
+    case 'BRIDGE_DISCONNECT': return NinjaExecutor.bridgeDisconnect(!!msg.forget);
+    case 'BRIDGE_APPROVE': return NinjaExecutor.bridgeApprove(!!msg.allow);
     case 'SIGN_IN': {
       if (!CONFIG.CLERK_PUBLISHABLE_KEY) throw new Error('Sign-in is not configured yet. XPath Finder is available.');
       // The website's sign-in page also hosts sign-up (?mode=signup); both finish on a known page.
@@ -252,10 +302,12 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     }
     if (msg.type === 'RECORD_CONTEXT') {
       await restored; const draft = await currentDraft();
-      return { recordingId: draft?.status === 'recording' && draft.tabId === sender.tab?.id ? draft.id : null };
+      const live = draft?.status === 'recording' && draft.tabId === sender.tab?.id;
+      return { recordingId: live ? draft.id : null, captureTyping: draft?.captureTyping !== false };
     }
     if (msg.type === 'RECORD_STEP') {
       await restored;
+      if (NinjaExecutor.isRunTab(sender.tab?.id)) throw new Error('Steps are not recorded in a test run window.');
       const task = stepWrites.then(async () => {
         const draft = await currentDraft();
         if (!draft || draft.id !== msg.recordingId || draft.tabId !== sender.tab?.id) throw new Error('The recording session changed.');
@@ -277,8 +329,33 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   handle().then(respond).catch(error => respond({ ok: false, error: error.message }));
   return true;
 });
+// The web app's "Run on this computer" (externally_connectable lists only the app's origin).
+chrome.runtime.onMessageExternal.addListener((msg, sender, respond) => {
+  NinjaExecutor.external(msg, sender).then(respond).catch(error => respond({ ok: false, error: 'failed', message: error.message }));
+  return true;
+});
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === 'qaninja-pending') NinjaExecutor.checkPending().catch(() => {});
+  if (alarm.name === 'qaninja-bridge') NinjaExecutor.bridgeKeepTrying().catch(() => {});
+});
+// A paired bridge reconnects on its own: now, and every minute while it is away (the alarm exists only while paired).
+NinjaExecutor.bridgeKeepTrying().catch(() => {});
+chrome.tabs.onRemoved.addListener(tabId => { if (NinjaExecutor.isRunTab(tabId)) NinjaExecutor.stop(); });
 chrome.tabs.onActivated.addListener(async () => {
   await broadcast({ type: 'INSPECT', action: 'clear' }); inspectionFrames.clear(); emit({ event: 'reset' });
+});
+// A page opened from the address bar or a bookmark during a recording is a navigate step; link clicks already are clicks.
+const TYPED = new Set(['typed', 'auto_bookmark', 'generated', 'keyword', 'keyword_generated']);
+chrome.webNavigation.onCommitted.addListener(async details => {
+  if (details.frameId !== 0 || !/^https?:/.test(details.url)) return;
+  if (!TYPED.has(details.transitionType) && !(details.transitionQualifiers || []).includes('from_address_bar')) return;
+  await restored;
+  const draft = await currentDraft();
+  if (draft?.status !== 'recording' || draft.tabId !== details.tabId) return;
+  const url = new URL(details.url);
+  stepWrites = stepWrites.then(() => NinjaStore.append(draft.id, { id: crypto.randomUUID(), url: details.url, xpath: '', action_type: 'navigate',
+    label: (url.host + url.pathname).slice(0, 120), value: '', aria_label: '', css_selector: '', shadow_path: '', timestamp: new Date().toISOString(),
+    tabId: details.tabId, frameId: 0, screenshot: null })).then(() => emit({ event: 'step', recordingId: draft.id })).catch(() => {});
 });
 chrome.webNavigation.onCommitted.addListener(details => {
   const selected = inspectionFrames.get(details.tabId);

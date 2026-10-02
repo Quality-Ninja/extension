@@ -3,13 +3,22 @@
   let opening;
   function open() {
     if (!opening) opening = new Promise((resolve, reject) => {
-      const req = indexedDB.open('qaninja', 1);
-      req.onupgradeneeded = () => {
-        req.result.createObjectStore('drafts', { keyPath: 'id' });
-        req.result.createObjectStore('steps', { keyPath: 'id' }).createIndex('recording', 'recordingId');
-        req.result.createObjectStore('settings');
+      // Version 2 adds Execute's local secrets. Each version only adds stores, so earlier data survives upgrades.
+      const req = indexedDB.open('qaninja', 2);
+      req.onupgradeneeded = event => {
+        const db = req.result;
+        if (event.oldVersion < 1) {
+          db.createObjectStore('drafts', { keyPath: 'id' });
+          db.createObjectStore('steps', { keyPath: 'id' }).createIndex('recording', 'recordingId');
+          db.createObjectStore('settings');
+        }
+        if (event.oldVersion < 2) db.createObjectStore('secrets', { keyPath: 'id' }).createIndex('scope', 'scope');
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        // Another context upgrading the database (a newer extension page) must not be blocked by this one.
+        req.result.onversionchange = () => { req.result.close(); opening = null; };
+        resolve(req.result);
+      };
       req.onerror = () => reject(req.error);
     });
     return opening;
@@ -55,5 +64,7 @@
     const req = tx.objectStore('steps').index('recording').openCursor(recordingId);
     req.onsuccess = () => { const cursor = req.result; if (cursor) { cursor.delete(); cursor.continue(); } };
   });
-  globalThis.NinjaStore = { get, put, append, steps, list, remove };
+  const all = table => transaction([table], 'readonly', (tx, done) => { tx.objectStore(table).getAll().onsuccess = e => done(e.target.result); });
+  const del = (table, key) => transaction([table], 'readwrite', tx => tx.objectStore(table).delete(key));
+  globalThis.NinjaStore = { get, put, append, steps, list, remove, all, del };
 })();

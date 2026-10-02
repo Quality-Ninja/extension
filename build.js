@@ -1,7 +1,7 @@
 const { build } = require('esbuild');
 const fs = require('fs');
 const vm = require('vm');
-const common = { bundle: true, platform: 'browser', target: 'chrome122', minify: true, legalComments: 'eof' };
+const common = { bundle: true, platform: 'browser', target: 'chrome125', minify: true, legalComments: 'eof' };
 if (process.env.NODE_ENV === 'production') {
   const config = vm.runInNewContext(fs.readFileSync('config.js', 'utf8') + '\nCONFIG');
   if (!config.CLERK_PUBLISHABLE_KEY?.startsWith('pk_live_') || !config.CLERK_SYNC_HOST?.startsWith('https://') || !config.APP_BASE_URL.startsWith('https://') || !config.API_BASE_URL.startsWith('https://')) {
@@ -10,5 +10,6 @@ if (process.env.NODE_ENV === 'production') {
 }
 Promise.all([
   build({ ...common, entryPoints: ['exports.mjs'], outfile: 'dist/exports.js', format: 'esm' }),
-  build({ ...common, entryPoints: ['auth.mjs'], outfile: 'dist/auth.js', format: 'iife', globalName: 'NinjaClerk' })
+  build({ ...common, entryPoints: ['auth.mjs'], outfile: 'dist/auth.js', format: 'iife', globalName: 'NinjaClerk' }),
+  build({ ...common, entryPoints: ['executor.mjs'], outfile: 'dist/executor.js', format: 'iife', globalName: 'NinjaExecutor' })
 ]).catch(() => process.exit(1));

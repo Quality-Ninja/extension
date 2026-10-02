@@ -595,12 +595,16 @@ textarea {
 
 /* The mode tabs sit on the trail: a dotted gold baseline, icons that light gold, and a glowing bar under the open tab. */
 .mode-tabs {
-  gap: var(--space-4);
+  gap: var(--space-3);
   border-bottom: 0;
   background: var(--trail-dots) 0 100% / 8px 3px repeat-x;
+  /* Four tools fit a 328px panel at this gap; narrower panels scroll the row instead of the page. */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .mode-tabs [role="tab"] {
+  flex: none;
   gap: 6px;
   min-height: 40px;
 }
@@ -1894,4 +1898,187 @@ html body.auth-page {
   .mode-tabs {
     border-bottom: 1px solid CanvasText;
   }
+}
+
+/* Execute: the run's status reuses the recorder's status dot; a run in progress is gold, a verdict takes its color. */
+.status[data-state="running"]::before {
+  border-color: var(--gold);
+  background: var(--gold);
+  box-shadow: var(--gold-glow);
+}
+
+.status[data-state="passed"]::before {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.status[data-state="failed"]::before,
+.status[data-state="error"]::before {
+  border-color: var(--signal);
+  background: var(--signal);
+}
+
+.status[data-state="blocked"]::before,
+.status[data-state="done"]::before {
+  border-color: var(--mist);
+  background: var(--mist);
+}
+
+.run-message {
+  min-height: 1lh;
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.run-steps {
+  max-height: 260px;
+  margin-bottom: var(--space-3);
+}
+
+.run-steps li[data-status="running"] {
+  color: var(--gold-hi);
+}
+
+.run-steps li[data-status="healed"] small {
+  color: var(--gold-hi);
+}
+
+.run-steps li[data-status="failed"] small {
+  color: var(--danger-text);
+}
+
+.run-steps li[data-status="passed"] small {
+  color: var(--ok);
+}
+
+.run-steps li[data-status="pending"] {
+  color: var(--muted);
+}
+
+.verdict {
+  display: inline-block;
+  flex: none;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-target);
+  color: var(--mist);
+  font: 600 var(--text-xs) / 1.6 var(--font-ui);
+  letter-spacing: 0.04em;
+}
+
+.verdict[data-verdict="PASSED"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.verdict[data-verdict="FAILED"],
+.verdict[data-verdict="ERROR"] {
+  border-color: var(--signal);
+  color: var(--danger-text);
+}
+
+.field-meta {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  font-weight: 400;
+}
+
+.check input {
+  flex: none;
+  width: auto;
+  min-height: 0;
+  margin: 3px 0 0;
+}
+
+.secrets {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-container);
+  background: var(--well);
+}
+
+.secrets .meta {
+  margin: 0;
+}
+
+.consent-list {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.consent-list li {
+  margin-bottom: var(--space-2);
+}
+
+.run-list {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.run-list li {
+  margin-bottom: var(--space-2);
+}
+
+.run-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--well);
+  color: var(--paper);
+  text-align: left;
+}
+
+.run-item .run-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-item small {
+  grid-column: 1 / -1;
+}
+
+.run-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.exec-settings {
+  margin-top: var(--space-4);
+  color: var(--mist);
+}
+
+.exec-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.bridge {
+  margin-top: var(--space-4);
+}
+
+.bridge code {
+  font: 400 var(--text-xs) / 1.5 var(--font-code);
+  color: var(--paper);
+}
+
+#bridge-code {
+  font: 600 var(--text-md) / 1 var(--font-code);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

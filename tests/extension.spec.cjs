@@ -7,7 +7,7 @@ const executablePath = process.env.CHROME_EXTENSION_EXECUTABLE;
 test.beforeEach(async ({}, testInfo) => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qaninja-extension-test-'));
   const source = path.resolve(__dirname, '..');
-  for (const name of ['manifest.json','background.js','session.js','store.js','config.js','xpath.js','inspector.js','content.js','sidebar.js','sidebar.css','sidebar.html','login.js','login.html','browser-polyfill.min.js','icons','fonts','dist']) {
+  for (const name of ['manifest.json','background.js','session.js','store.js','config.js','xpath.js','dom.js','inspector.js','snapshot.js','content.js','sidebar.js','sidebar.css','sidebar.html','login.js','login.html','browser-polyfill.min.js','icons','fonts','dist']) {
     fs.cpSync(path.join(source,name),path.join(dir,name),{recursive:true});
   }
   const productionBundle = testInfo.title.includes('production auth bundle');
@@ -266,7 +266,7 @@ test('installed extension: sign-in opens the website and cancellation keeps Find
 
 test('installed extension: paid tabs open on covers, and every Log in link returns to its tab', async()=>{
   const apiRequests=[];context.on('request',req=>{if(req.url().includes('/me/')||req.url().includes('/workflows'))apiRequests.push(req.url())});
-  await expect(panel.locator('[role="tablist"][aria-label="Tool"] [role="tab"]')).toHaveText(['XPath','Record','Generate']);
+  await expect(panel.locator('[role="tablist"][aria-label="Tool"] [role="tab"]')).toHaveText(['XPath','Record','Generate','Execute']);
   await expectSignedOut();
   await expect(panel.locator('#promo')).toHaveCount(0);
   await expect(panel.locator('#footer-login')).toHaveAttribute('href','login.html?mode=login&open=1');
@@ -278,6 +278,11 @@ test('installed extension: paid tabs open on covers, and every Log in link retur
   // The preview under the sheet is a picture: hidden from assistive tech and inert.
   await expect(panel.locator('#generate-cover .cover-preview')).toHaveAttribute('aria-hidden','true');
   await expect(panel.locator('#generate-signin')).toHaveAttribute('href','login.html?mode=login&return=generate&open=1');
+  await waitResponse(()=>click('mode-execute'));
+  await expect(panel.locator('#execute-cover')).toBeVisible();
+  await expect(panel.locator('#execute-tools')).toBeHidden();
+  await expect(panel.locator('#execute-signin')).toHaveAttribute('href','login.html?mode=login&return=execute&open=1');
+  expect(await panel.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   await waitResponse(()=>click('mode-record'));
   await expect(panel.locator('#record-cover')).toBeVisible();
   await expect(panel.locator('#record-signin')).toHaveAttribute('href','login.html?mode=login&return=record&open=1');

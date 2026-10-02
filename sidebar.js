@@ -8,7 +8,7 @@ let quota = null, quotaTimer = null;
 let plans = null, plansRequest = null, planId = null, savedPlanId = null, framework = 'playwright', script = '';
 const recordings = new Map();
 const pending = new Map();
-const TABS = { xpath: 'finder', record: 'recorder', generate: 'generator' };
+const TABS = { xpath: 'finder', record: 'recorder', generate: 'generator', execute: 'executor' };
 const PLAN_NAMES = { FREE: 'Free plan', BASIC: 'Basic plan', SUPER: 'Supercharged plan' };
 // Scripts come from the same generator as a recording's exports. Downloads are named for the plan.
 const FRAMEWORKS = {
@@ -68,6 +68,9 @@ function connect() {
     if (msg.event === 'recording') { draft = msg.draft; renderRecording(); }
     if (msg.event === 'step') refreshDraft();
     if (msg.event === 'error') notice(msg.message, true);
+    if (msg.event === 'run') { exec.run = msg.run; renderRun(); if (msg.run?.done) loadExecLists().catch(() => {}); }
+    if (msg.event === 'ask') showAsk(msg.ask);
+    if (msg.event === 'bridge') { exec.bridge = msg.bridge; renderBridge(); }
   });
   port.onDisconnect.addListener(() => {
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Connection interrupted. Your recording draft is preserved.')); }
@@ -94,6 +97,7 @@ async function renderAuth() {
   if (authEpoch !== (auth?.epoch || null)) {
     authEpoch = auth?.epoch || null; authRevision++;
     caps = {}; capsKnown = false; plans = null; plansRequest = null; planId = null; savedPlanId = null; recordings.clear();
+    exec.tests = null; exec.connections = []; exec.secretNames = [];
     script = ''; $('script-text').textContent = ''; $('plans').replaceChildren();
   }
   if (!signedIn) { caps = { recording: false, signedIn: false }; capsKnown = true; }
@@ -130,6 +134,7 @@ async function renderPlanState() {
   renderPlan();
   if (mode === 'record') await renderRecording();
   if (mode === 'generate') await renderGenerate();
+  if (mode === 'execute') await renderExecute();
 }
 async function refreshCaps(quiet = false) {
   const revision = authRevision;
@@ -138,7 +143,7 @@ async function refreshCaps(quiet = false) {
     if (revision !== authRevision) return;
     if (error.status === 401) {
       caps = { recording: false, signedIn: false }; capsKnown = true;
-      if (!quiet) notice(`Your session ended. Log in again to ${mode === 'generate' ? 'see your test plans' : 'record'}.`, true);
+      if (!quiet) notice(`Your session ended. Log in again to ${mode === 'generate' ? 'see your test plans' : mode === 'execute' ? 'run tests' : 'record'}.`, true);
     } else if (!quiet) notice(error.message, true);
   }
   renderPlan();
@@ -291,7 +296,9 @@ async function changeMode(next) {
   notice();
   if (mode === 'xpath') return;
   await refreshCaps();
-  if (mode === 'record') await refreshDraft(); else await renderGenerate(true);
+  if (mode === 'record') await refreshDraft();
+  else if (mode === 'generate') await renderGenerate(true);
+  else await renderExecute(true);
 }
 // The empty test plan list and a dashboard save lead to another tab; focus goes to that tab.
 async function openTab(name) { await changeMode(name); $(`mode-${name}`).focus(); }
@@ -326,13 +333,21 @@ async function renderRecording() {
     const steps = await NinjaStore.steps(draft.id);
     $('step-count').textContent = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
     $('draft-title').textContent = draft.name;
+    $('capture-typing').checked = draft.captureTyping !== false;
     $('steps').replaceChildren(...steps.slice(-50).map(step => {
-      const li = document.createElement('li'); li.value = step.sequence; li.textContent = step.label;
+      const li = document.createElement('li'); li.value = step.sequence; li.textContent = stepText(step);
       const small = document.createElement('small'); small.textContent = step.xpath; li.append(small); return li;
     }));
     $('steps-note').hidden = steps.length <= 50;
     $('steps-note').textContent = `Showing the latest 50 of ${steps.length} steps.`;
   }
+}
+// Steps read as actions: "Typed into Email", "Pressed Enter", "Opened shop.example.com/cart".
+const VERBS = { fill: 'Typed into', select: 'Selected in', check: 'Checked', uncheck: 'Unchecked', press: 'Pressed', navigate: 'Opened' };
+function stepText(step) {
+  if (step.action_type === 'press') return `Pressed ${step.key || 'Enter'}`;
+  if (step.action_type === 'fill' && step.sensitive) return `Typed a secret into ${step.label}`;
+  return VERBS[step.action_type] ? `${VERBS[step.action_type]} ${step.label}` : step.label;
 }
 let exporter, folderHandle = null;
 function showFolder(handle) {
@@ -493,7 +508,7 @@ function arrowKeys(row, activate) {
     event.preventDefault(); const tab = tabs[(next + tabs.length) % tabs.length]; tab.focus(); if (activate) tab.click();
   });
 }
-for (const name of Object.keys(TABS)) bind(`mode-${name}`, () => changeMode(name));
+for (const name of Object.keys(TABS)) if (name !== 'execute') bind(`mode-${name}`, () => changeMode(name));
 arrowKeys($('mode-xpath').parentElement, false); arrowKeys($('frameworks'), true);
 for (const tab of $('frameworks').children) bind(tab.id, () => setFramework(tab.dataset.framework));
 bind('plans-record', () => openTab('record'));
@@ -573,6 +588,8 @@ document.addEventListener('keydown', event => {
   if ($('menu').open) { $('menu').open = false; menuSummary.focus(); return; }
   if (picking) cancelPick().then(() => notice('Selection cancelled.')).catch(error => notice(error.message, true));
 });
+$('capture-typing').onchange = () => rpc('RECORD_TYPING', { on: $('capture-typing').checked }).catch(fail);
+chrome.storage.local.get('capture_typing').then(data => { if (!draft) $('capture-typing').checked = data.capture_typing !== false; });
 $('destination').onchange = async () => { await chrome.storage.local.set({ destination: $('destination').value }); $('folder-row').hidden = $('destination').value !== 'local'; };
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !('auth_state' in changes || 'capabilities' in changes)) return;
@@ -580,6 +597,204 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 window.addEventListener('focus', () => refreshSession().catch(fail));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshSession().catch(fail); });
+// Execute: run a saved test in a Chrome window that QA Ninja drives. The worker owns the run; this tab starts it,
+// shows its progress, and answers the agent's questions.
+const exec = { tests: null, connections: [], run: null, prefs: {}, consentVersion: 1, pending: [], recent: [], ask: null, secretNames: [], timer: 0 };
+const PHASES = { opening: 'Opening the test window…', replaying: 'Replaying', recovering: 'The agent is fixing a step', verifying: 'The agent is checking the outcome',
+  agent: 'The agent is running the test', done: 'Finished' };
+const STEP_STATUS = { pending: 'Waiting', running: 'Running', passed: 'Passed', healed: 'Fixed by the agent', failed: 'Failed', blocked: 'Blocked', skipped: 'Skipped' };
+const PROVIDERS = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', openrouter: 'OpenRouter', chatgpt: 'ChatGPT' };
+function element(tag, className, text) { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; }
+function selectedTest() { return exec.tests?.find(test => test.id === Number($('exec-test').value)); }
+async function loadExecLists() {
+  const [pending, recent] = await Promise.all([rpc('EXEC_PENDING').catch(() => []), rpc('EXEC_RUNS').catch(() => ({ data: [] }))]);
+  exec.pending = pending || []; exec.recent = recent?.data || [];
+  renderExecLists();
+}
+async function renderExecute(reload = false) {
+  const open = capsKnown && !!caps.execute;
+  $('execute-cover').hidden = !capsKnown || open; $('execute-tools').hidden = !open;
+  $('execute-signin').hidden = !!caps.signedIn; $('execute-plans').classList.toggle('primary', !!caps.signedIn);
+  if (!open) return;
+  const revision = authRevision;
+  if (reload || !exec.tests) {
+    const [tests, connections, status] = await Promise.all([rpc('EXEC_TESTS'), rpc('EXEC_CONNECTIONS').catch(() => []), rpc('EXEC_STATE')]);
+    if (revision !== authRevision) return;
+    exec.tests = tests; exec.connections = connections; exec.run = status.run; exec.prefs = status.prefs; exec.consentVersion = status.consentVersion;
+    loadExecLists().catch(() => {});
+  }
+  renderSetup(); renderRun();
+  rpc('BRIDGE_STATE').then(view => { exec.bridge = view; renderBridge(); }).catch(() => {});
+  clearInterval(exec.timer);
+  exec.timer = setInterval(() => { if (mode === 'execute' && !document.hidden) loadExecLists().catch(() => {}); }, 15000);
+}
+function renderSetup() {
+  const tests = exec.tests || [];
+  $('exec-empty').hidden = !!tests.length; $('exec-setup').hidden = !tests.length || !!(exec.run && !exec.run.done);
+  $('exec-consent').hidden = (exec.prefs.consent || 0) >= exec.consentVersion;
+  $('exec-auto-run').checked = !!exec.prefs.autoRun; $('exec-close-window').checked = !!exec.prefs.closeWindow;
+  if (!tests.length) return;
+  const chosen = Number($('exec-test').value) || tests[0].id;
+  $('exec-test').replaceChildren(...tests.map(test => { const option = element('option', '', test.name); option.value = test.id; return option; }));
+  $('exec-test').value = String(tests.some(test => test.id === chosen) ? chosen : tests[0].id);
+  const brains = [];
+  if (caps.execute_managed_available) {
+    const left = Math.max(0, (caps.execute_managed_limit || 0) - (caps.execute_managed_used || 0));
+    brains.push(['managed', `QA Ninja Agent (${left} ${left === 1 ? 'run' : 'runs'} left this month)`]);
+  }
+  for (const item of exec.connections) {
+    if (item.status === 'active' && item.model) brains.push([item.id, `${item.label || PROVIDERS[item.provider]} · ${item.model}`]);
+  }
+  brains.push(['none', 'No agent (replay only)']);
+  // The test's default agent applies unless the person picked one themselves.
+  const previous = $('exec-brain').dataset.touched ? $('exec-brain').value : null;
+  $('exec-brain').replaceChildren(...brains.map(([value, label]) => { const option = element('option', '', label); option.value = value; return option; }));
+  const test = selectedTest();
+  const preferred = test?.settings?.default_brain;
+  $('exec-brain').value = brains.some(([value]) => value === previous) ? previous : brains.some(([value]) => value === preferred) ? preferred : brains[0][0];
+  if (!$('exec-mode').dataset.touched) $('exec-mode').value = test?.settings?.default_mode || 'assisted';
+  renderTestMeta();
+}
+async function renderTestMeta() {
+  const test = selectedTest(); if (!test) return;
+  const last = test.last_run;
+  $('exec-test-meta').textContent = `${test.steps} ${test.steps === 1 ? 'step' : 'steps'}` + (last?.verdict ? ` · last run ${last.verdict.toLowerCase()}` : '') +
+    (test.settings?.goal ? ` · Goal: ${test.settings.goal}` : '');
+  if (!$('exec-base-url').dataset.touched) $('exec-base-url').value = test.settings?.base_url || '';
+  const noAgent = $('exec-brain').value === 'none';
+  $('exec-mode').disabled = noAgent; if (noAgent) $('exec-mode').value = 'replay';
+  $('exec-brain-meta').textContent = noAgent ? 'Broken steps fail the run instead of being fixed.' : $('exec-brain').value === 'managed' ? 'Runs on QA Ninja. A run counts only if the agent is needed.' : 'Runs on your own key.';
+  // The recording's own secret fields and any the test's settings add, by name; values are typed here, never stored by QA Ninja.
+  const secrets = test.secrets || test.settings?.secrets || [];
+  const names = await rpc('EXEC_SECRETS', { testId: test.id }).then(result => result.names).catch(() => []);
+  exec.secretNames = names;
+  $('exec-forget').hidden = !names.length;
+  $('exec-secrets').hidden = !secrets.length;
+  $('exec-secret-fields').replaceChildren(...secrets.map(secret => {
+    const field = element('div', 'field');
+    const label = element('label', '', secret.label || secret.name); label.htmlFor = `secret-${secret.name}`;
+    const input = element('input'); input.type = 'password'; input.id = `secret-${secret.name}`; input.dataset.secret = secret.name; input.autocomplete = 'off';
+    input.placeholder = names.includes(secret.name) ? 'Saved on this device' : 'Enter for this run';
+    field.append(label, input); return field;
+  }));
+}
+function runState(run) {
+  if (!run) return 'idle';
+  if (run.done) return (run.verdict || (run.error ? 'error' : 'done')).toLowerCase();
+  return run.paused ? 'paused' : 'running';
+}
+function renderRun() {
+  const run = exec.run;
+  $('exec-run').hidden = !run;
+  $('exec-setup').hidden = !exec.tests?.length || !!(run && !run.done);
+  if (!run) return;
+  const total = run.steps.filter(step => step.index < 1000).length;
+  const current = run.current != null ? run.steps.findIndex(step => step.index === run.current) + 1 : 0;
+  $('exec-run-title').textContent = run.name || 'Run';
+  $('exec-run-status').dataset.state = runState(run);
+  $('exec-run-status').textContent = run.done ? (run.verdict ? `Run ${run.verdict.toLowerCase()}` : run.error ? 'Run stopped' : 'Run finished')
+    : run.paused ? 'You have control of the test window' : run.phase === 'replaying' && current ? `Replaying step ${current} of ${total}` : PHASES[run.phase] || 'Starting…';
+  $('exec-run-message').textContent = run.message || '';
+  $('exec-run-verdict').hidden = !run.verdict; $('exec-run-verdict').textContent = run.verdict || ''; $('exec-run-verdict').dataset.verdict = run.verdict || '';
+  $('exec-run-steps').replaceChildren(...run.steps.slice(-60).map(step => {
+    const li = element('li', '', step.label || `Step ${step.index + 1}`); li.value = step.index + 1; li.dataset.status = step.status;
+    li.append(element('small', '', STEP_STATUS[step.status] || step.status)); return li;
+  }));
+  $('exec-takeover').hidden = $('exec-stop').hidden = !!run.done;
+  $('exec-takeover').textContent = run.paused ? 'Resume' : 'Take over';
+  $('exec-open-run').hidden = $('exec-new-run').hidden = !run.done;
+}
+function renderExecLists() {
+  $('exec-pending').hidden = !exec.pending.length;
+  $('exec-pending-list').replaceChildren(...exec.pending.map(run => {
+    const li = element('li', 'run-item');
+    li.append(element('span', 'run-name', run.name), element('small', 'meta', run.origin === 'mcp_remote' ? 'From a coding agent' : 'From the dashboard'));
+    const actions = element('span', 'run-actions');
+    const start = element('button', 'compact primary', 'Run'); start.type = 'button';
+    start.addEventListener('click', () => startPending(run.id).catch(fail));
+    const dismiss = element('button', 'compact quiet', 'Dismiss'); dismiss.type = 'button';
+    dismiss.addEventListener('click', () => rpc('EXEC_DISMISS', { runId: run.id }).then(loadExecLists).catch(fail));
+    actions.append(start, dismiss); li.append(actions); return li;
+  }));
+  $('exec-recent').hidden = !exec.recent.length;
+  $('exec-recent-list').replaceChildren(...exec.recent.map(run => {
+    const button = element('button', 'run-item'); button.type = 'button';
+    const chip = element('span', 'verdict', run.verdict || run.status); chip.dataset.verdict = run.verdict || run.status.toUpperCase();
+    button.append(element('span', 'run-name', run.name), chip, element('small', 'meta', `${run.steps_passed}/${run.steps_total} steps${run.healed_steps ? ` · ${run.healed_steps} fixed` : ''}`));
+    button.addEventListener('click', () => rpc('WEBSITE', { page: 'run', id: run.id }).catch(fail));
+    return element('li').appendChild(button).parentElement;
+  }));
+}
+async function startPending(runId) {
+  await rpc('EXEC_APPROVE', { runId, consent: (exec.prefs.consent || 0) >= exec.consentVersion });
+  notice(); await loadExecLists();
+}
+async function startRun() {
+  const test = selectedTest(); if (!test) throw new Error('Choose a test to run.');
+  const secrets = {};
+  for (const input of $('exec-secret-fields').querySelectorAll('input[data-secret]')) if (input.value) secrets[input.dataset.secret] = input.value;
+  try {
+    exec.run = { name: test.name, steps: [], phase: 'opening', done: false };
+    renderRun();
+    await rpc('EXEC_START', { workflowId: test.id, mode: $('exec-mode').value, brain: $('exec-brain').value, baseUrl: $('exec-base-url').value.trim() || null,
+      secrets, remember: $('exec-remember').checked, consent: (exec.prefs.consent || 0) >= exec.consentVersion });
+    for (const input of $('exec-secret-fields').querySelectorAll('input')) input.value = '';
+    notice();
+  } catch (error) {
+    exec.run = (await rpc('EXEC_STATE').catch(() => ({}))).run || null; renderRun(); renderSetup();
+    if (error.message.startsWith('Confirm how test runs work')) { $('exec-consent').hidden = false; $('exec-consent-accept').focus(); }
+    throw error;
+  }
+}
+function showAsk(ask) {
+  exec.ask = ask;
+  $('exec-ask').hidden = false; $('exec-ask-reason').textContent = ask.reason || '';
+  $('exec-ask-label').textContent = ask.label || ask.name; $('exec-ask-value').value = ''; $('exec-ask-value').focus();
+}
+async function answerAsk(value) {
+  if (!exec.ask) return;
+  await rpc('EXEC_ANSWER', { id: exec.ask.id, value }); exec.ask = null; $('exec-ask').hidden = true;
+}
+function renderBridge() {
+  const bridge = exec.bridge || { status: 'disconnected', paired: false };
+  const connected = bridge.status === 'connected';
+  $('bridge-status').textContent = connected ? `Connected to ${bridge.agent || 'your coding agent'}` : bridge.status === 'connecting' ? 'Connecting…'
+    : bridge.paired ? 'Paired, not connected' : 'Not connected';
+  $('bridge-pair').hidden = connected || bridge.paired;
+  $('bridge-actions').hidden = !connected && !bridge.paired;
+  $('bridge-reconnect').hidden = connected; $('bridge-disconnect').hidden = !connected;
+  $('bridge-approval').hidden = !bridge.approvalNeeded;
+  $('bridge-approval-text').textContent = `${bridge.agent || 'Your coding agent'} wants to run tests in this browser. It will see page text and screenshots of the test window, never your secrets.`;
+  if (bridge.error && !connected) notice(bridge.error, true);
+}
+bind('bridge-pair-button', async () => { exec.bridge = await rpc('BRIDGE_PAIR', { code: $('bridge-code').value }); $('bridge-code').value = ''; renderBridge(); toast('Coding agent connected', exec.bridge.agent || ''); });
+bind('bridge-reconnect', async () => { exec.bridge = await rpc('BRIDGE_CONNECT'); renderBridge(); if (exec.bridge.status !== 'connected') notice('The bridge is not running. Start your coding agent, then reconnect.', true); });
+bind('bridge-disconnect', async () => { exec.bridge = await rpc('BRIDGE_DISCONNECT', { forget: false }); renderBridge(); });
+bind('bridge-forget', async () => { exec.bridge = await rpc('BRIDGE_DISCONNECT', { forget: true }); renderBridge(); });
+bind('bridge-allow', async () => { exec.bridge = await rpc('BRIDGE_APPROVE', { allow: true }); renderBridge(); });
+bind('bridge-deny', async () => { exec.bridge = await rpc('BRIDGE_APPROVE', { allow: false }); renderBridge(); });
+$('bridge-code').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('bridge-pair-button').click(); } });
+bind('mode-execute', () => changeMode('execute'));
+bind('execute-plans', () => rpc('WEBSITE', { page: 'account' }));
+bind('exec-consent-accept', async () => { exec.prefs = await rpc('EXEC_PREFS', { changes: { consent: true } }); renderSetup(); });
+bind('exec-start', startRun);
+bind('exec-stop', () => rpc('EXEC_STOP'));
+bind('exec-takeover', () => rpc(exec.run?.paused ? 'EXEC_RESUME' : 'EXEC_TAKEOVER'));
+bind('exec-open-run', () => rpc('WEBSITE', { page: 'run', id: exec.run?.id }));
+bind('exec-new-run', async () => { exec.run = null; renderRun(); await renderExecute(true); });
+bind('exec-manage', () => rpc('WEBSITE', { page: 'execute', tab: 'agents' }));
+bind('exec-record', () => openTab('record'));
+bind('exec-ask-send', () => answerAsk($('exec-ask-value').value));
+bind('exec-ask-skip', () => answerAsk(null));
+bind('exec-forget', async () => { const test = selectedTest(); if (test) { await rpc('EXEC_FORGET', { testId: test.id }); await renderTestMeta(); toast('Saved secrets removed', test.name); } });
+$('exec-test').addEventListener('change', () => { for (const id of ['exec-base-url', 'exec-mode', 'exec-brain']) delete $(id).dataset.touched; renderSetup(); });
+$('exec-brain').addEventListener('change', () => { $('exec-brain').dataset.touched = '1'; renderTestMeta().catch(fail); });
+$('exec-mode').addEventListener('change', () => { $('exec-mode').dataset.touched = '1'; });
+$('exec-base-url').addEventListener('input', () => { $('exec-base-url').dataset.touched = '1'; });
+$('exec-auto-run').addEventListener('change', () => rpc('EXEC_PREFS', { changes: { autoRun: $('exec-auto-run').checked } }).then(prefs => { exec.prefs = prefs; }).catch(fail));
+$('exec-close-window').addEventListener('change', () => rpc('EXEC_PREFS', { changes: { closeWindow: $('exec-close-window').checked } }).then(prefs => { exec.prefs = prefs; }).catch(fail));
+$('exec-ask-value').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('exec-ask-send').click(); } });
+
 connect();
 renderAuthLinks(); renderAuth().catch(fail); renderPickState(); loadQuota(); refreshSession().catch(fail);
 $('version').textContent = `QA Ninja ${chrome.runtime.getManifest().version}`;

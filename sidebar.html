@@ -37,6 +37,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>
       Generate
     </button>
+    <button id="mode-execute" type="button" role="tab" aria-selected="false" aria-controls="executor" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z" fill="currentColor" stroke="none"/></svg>
+      Execute
+    </button>
   </div>
 
   <p id="notice" class="notice" role="status" aria-live="polite"></p>
@@ -182,6 +186,7 @@
             <span id="folder-name" class="meta">No folder chosen</span>
             <button id="choose-folder" type="button" class="quiet">Choose folder</button>
           </div>
+          <label class="check"><input id="capture-typing" type="checkbox" checked> Capture typed text (passwords and codes never are)</label>
           <p id="record-status" class="status" role="status" data-state="idle">Ready to record</p>
           <p id="record-lapsed" class="meta" hidden>Recording needs an active plan. You can still save or discard this draft.</p>
           <div class="row">
@@ -289,6 +294,138 @@ def test_recording():
           <button id="plans-record" type="button" class="primary">Record a workflow</button>
         </div>
         <button id="plans-retry" type="button" hidden>Try again</button>
+      </div>
+    </section>
+
+    <section id="executor" class="tool" role="tabpanel" aria-labelledby="mode-execute" hidden>
+      <!-- Without a paid plan, Execute opens on its cover, like Record and Generate. -->
+      <section id="execute-cover" class="cover" aria-labelledby="execute-cover-title" hidden>
+        <div class="cover-preview" aria-hidden="true" inert>
+          <p class="status" data-state="running">The agent is fixing step 5</p>
+          <ol class="steps run-steps">
+            <li data-status="passed">Add to cart<small>Passed</small></li>
+            <li data-status="passed">Cart<small>Passed</small></li>
+            <li data-status="passed">Checkout<small>Passed</small></li>
+            <li data-status="passed">Email<small>Passed</small></li>
+            <li data-status="healed">Place order<small>Fixed by the agent: the button is now "Buy now"</small></li>
+            <li data-status="running">View order<small>Running</small></li>
+          </ol>
+          <div class="row"><button type="button">Take over</button><button type="button" class="danger">Stop</button></div>
+        </div>
+        <div class="cover-sheet">
+          <h2 id="execute-cover-title">Run your tests with AI agents</h2>
+          <p>Replay a saved recording in a Chrome window. When a step no longer matches the page, an AI agent fixes it and judges the result. Use QA Ninja's agent, your own API key, or your coding agent.</p>
+          <div class="cover-actions">
+            <a id="execute-signin" class="button primary" href="login.html?mode=login&amp;return=execute&amp;open=1">Log in</a>
+            <button id="execute-plans" type="button">View plans</button>
+          </div>
+          <p class="meta">Execute is part of the Basic and Supercharged plans.</p>
+        </div>
+      </section>
+      <div id="execute-tools" hidden>
+        <section id="exec-consent" class="gate consent" aria-labelledby="exec-consent-title" hidden>
+          <h2 id="exec-consent-title">Before your first run</h2>
+          <ul class="consent-list">
+            <li>QA Ninja opens a new Chrome window and controls it. Chrome shows "QA Ninja started debugging this browser" while a run is going.</li>
+            <li>It works with what this browser can reach, including sites you are signed in to. Use staging sites and test accounts.</li>
+            <li>When an agent helps, page text and screenshots from the test window go to that agent's AI provider. Secrets you enter here stay in this browser.</li>
+            <li>You can stop a run or take over the window at any time.</li>
+          </ul>
+          <div class="row"><button id="exec-consent-accept" type="button" class="primary">I understand</button></div>
+        </section>
+        <section id="exec-run" aria-labelledby="exec-run-title" hidden>
+          <div class="section-label"><h2 id="exec-run-title">Run</h2><span id="exec-run-verdict" class="verdict" hidden></span></div>
+          <p id="exec-run-status" class="status" role="status" data-state="running"></p>
+          <p id="exec-run-message" class="meta run-message"></p>
+          <ol id="exec-run-steps" class="steps run-steps"></ol>
+          <div class="row">
+            <button id="exec-takeover" type="button">Take over</button>
+            <button id="exec-stop" type="button" class="danger">Stop</button>
+            <button id="exec-open-run" type="button" class="quiet" hidden>Open in dashboard</button>
+            <button id="exec-new-run" type="button" class="primary" hidden>New run</button>
+          </div>
+        </section>
+        <section id="exec-ask" class="gate" aria-labelledby="exec-ask-title" hidden>
+          <h2 id="exec-ask-title">The agent needs a value</h2>
+          <p id="exec-ask-reason"></p>
+          <div class="field"><label id="exec-ask-label" for="exec-ask-value">Value</label><input id="exec-ask-value" type="text" autocomplete="off"></div>
+          <div class="row"><button id="exec-ask-send" type="button" class="primary">Send</button><button id="exec-ask-skip" type="button" class="quiet">Skip</button></div>
+        </section>
+        <section id="exec-setup" aria-label="Run a test">
+          <div class="field">
+            <label for="exec-test">Test</label>
+            <select id="exec-test"></select>
+            <p id="exec-test-meta" class="meta field-meta"></p>
+          </div>
+          <div class="field">
+            <label for="exec-brain">Agent</label>
+            <select id="exec-brain"></select>
+            <p id="exec-brain-meta" class="meta field-meta"></p>
+          </div>
+          <div class="field">
+            <label for="exec-mode">Mode</label>
+            <select id="exec-mode">
+              <option value="assisted">Assisted: replay, the agent fixes broken steps</option>
+              <option value="replay">Replay only</option>
+              <option value="agent">Agent: work from the test's goal</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="exec-base-url">Run against (optional)</label>
+            <input id="exec-base-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://staging.example.com">
+          </div>
+          <div id="exec-secrets" class="secrets" hidden>
+            <p class="meta">Secrets stay in this browser. The agent sees their names, never their values.</p>
+            <div id="exec-secret-fields"></div>
+            <label class="check"><input id="exec-remember" type="checkbox"> Remember on this device</label>
+          </div>
+          <div class="row">
+            <button id="exec-start" type="button" class="primary">Run test</button>
+            <button id="exec-manage" type="button" class="quiet">Manage agents</button>
+          </div>
+        </section>
+        <div id="exec-empty" class="empty" hidden>
+          <h2>No tests yet</h2>
+          <p>Record a workflow and save it to your dashboard. It shows up here as a test you can run.</p>
+          <button id="exec-record" type="button" class="primary">Record a workflow</button>
+        </div>
+        <section id="exec-pending" aria-labelledby="exec-pending-title" hidden>
+          <div class="section-label"><h2 id="exec-pending-title">Requested runs</h2></div>
+          <ul id="exec-pending-list" class="run-list"></ul>
+        </section>
+        <section id="exec-recent" aria-labelledby="exec-recent-title" hidden>
+          <div class="section-label"><h2 id="exec-recent-title">Recent runs</h2></div>
+          <ul id="exec-recent-list" class="run-list"></ul>
+        </section>
+        <section id="exec-bridge" class="bridge" aria-labelledby="exec-bridge-title">
+          <div class="section-label"><h2 id="exec-bridge-title">Coding agent</h2><span id="bridge-status" class="meta">Not connected</span></div>
+          <div id="bridge-approval" class="gate" role="alert" hidden>
+            <p id="bridge-approval-text"></p>
+            <div class="row">
+              <button id="bridge-allow" type="button" class="primary">Allow until disconnected</button>
+              <button id="bridge-deny" type="button" class="quiet">Deny</button>
+            </div>
+          </div>
+          <div id="bridge-pair" hidden>
+            <p class="meta">Add QA Ninja to Claude Code, Codex or Cursor with <code>npx -y @qaninja/mcp</code>, then enter the code it prints. Your agent can then run tests here on your own plan.</p>
+            <div class="field">
+              <label for="bridge-code">Pairing code</label>
+              <input id="bridge-code" type="text" autocomplete="off" spellcheck="false" placeholder="ABCD-1234" maxlength="9">
+            </div>
+            <div class="row"><button id="bridge-pair-button" type="button">Connect</button></div>
+          </div>
+          <div id="bridge-actions" class="row" hidden>
+            <button id="bridge-reconnect" type="button" hidden>Reconnect</button>
+            <button id="bridge-disconnect" type="button" class="quiet" hidden>Disconnect</button>
+            <button id="bridge-forget" type="button" class="quiet danger">Forget this agent</button>
+          </div>
+        </section>
+        <details class="exec-settings">
+          <summary>Run settings</summary>
+          <label class="check"><input id="exec-auto-run" type="checkbox"> Start runs requested from the dashboard or a coding agent without asking</label>
+          <label class="check"><input id="exec-close-window" type="checkbox"> Close the test window when a run ends</label>
+          <button id="exec-forget" type="button" class="quiet compact" hidden>Forget saved secrets for this test</button>
+        </details>
       </div>
     </section>
   </main>
